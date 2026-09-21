@@ -10,10 +10,7 @@ crate-type = ["staticlib"]
 [dependencies]
 cxx = "1"
 quent-dynamic-attributes = { path = "../../../../../../../crates/dynamic-attributes" }
-quent-instrumentation = {
-    path = "../../../../../../../crates/instrumentation",
-    features = ["serde", "io-ndjson"],
-}
+quent-instrumentation = { path = "../../../../../../../crates/instrumentation", features = ["serde", "io-ndjson"] }
 quent-io = { path = "../../../../../../../crates/io", default-features = false, features = ["ndjson"] }
 quent-readme-example = { path = "../../../../../../../examples/readme" }
 
