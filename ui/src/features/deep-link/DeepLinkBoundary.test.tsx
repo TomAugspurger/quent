@@ -40,6 +40,7 @@ const BOUNDARY_PROPS = {
   engineId: 'e',
   queryId: 'q',
   activeTab: 'timeline' as const,
+  initialPlanId: '',
   durationSeconds: 100,
   isQueryReady: true,
   operators: [],
@@ -330,6 +331,7 @@ describe('DeepLinkBoundary', () => {
       <JotaiProvider>
         <DeepLinkBoundary
           {...BOUNDARY_PROPS}
+          initialPlanId="root-plan"
           operators={DEEP_LINK_OPERATORS}
           encodedState={encoded.value}
         >

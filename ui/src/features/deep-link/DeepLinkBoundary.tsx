@@ -12,6 +12,7 @@ import {
 } from 'react';
 import { useStore } from 'jotai';
 import {
+  useHydrateSelectedPlanId,
   useReadZoomRange,
   useSerializableViewState,
   useSetDebouncedZoomRange,
@@ -69,6 +70,7 @@ interface DeepLinkBoundaryProps {
   engineId: string;
   queryId?: string;
   activeTab?: DeepLinkTab;
+  initialPlanId: string;
   durationSeconds: number;
   defaultRootResourceType?: string | null;
   operators: readonly Operator[];
@@ -162,12 +164,14 @@ export function DeepLinkBoundary({
   engineId,
   queryId,
   activeTab,
+  initialPlanId,
   durationSeconds,
   defaultRootResourceType = null,
   operators,
   encodedState,
   isQueryReady,
 }: DeepLinkBoundaryProps) {
+  useHydrateSelectedPlanId(initialPlanId);
   const store = useStore();
   const readZoomRange = useReadZoomRange();
   const setZoomRange = useSetZoomRange();

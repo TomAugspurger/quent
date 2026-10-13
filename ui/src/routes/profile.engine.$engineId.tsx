@@ -89,6 +89,7 @@ function ProfileLayout() {
       engineId={engineId}
       queryId={queryId}
       activeTab={activeTab}
+      initialPlanId={queryBundle?.plan_tree.id ?? ''}
       durationSeconds={queryBundle?.duration_s ?? 0}
       defaultRootResourceType={defaultRootResourceType(queryBundle)}
       operators={operators}

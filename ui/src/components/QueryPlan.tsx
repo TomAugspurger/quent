@@ -114,12 +114,6 @@ export function QueryPlan({ queryId, engineId }: { queryId: string; engineId: st
   const closeDagSettings = useCallback(() => setDagSettingsOpen(false), []);
 
   useEffect(() => {
-    if (queryBundle && !planId) {
-      setPlanId(queryBundle.plan_tree.id);
-    }
-  }, [queryBundle, planId, setPlanId]);
-
-  useEffect(() => {
     const panel = operatorDetailsPanelRef.current;
     if (operatorDetailsExpanded) {
       panel?.expand();
