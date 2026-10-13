@@ -13,6 +13,7 @@ export {
 export { parseJsonWithBigInt } from './parseJsonWithBigInt';
 export { getFsmTypeName, getResourceTypeName } from './timeline';
 export { workerDisplayName } from './worker';
+export { ALL_FSMS, resolveResourceFsmType, resourceFsmChoices } from './resource';
 
 // Color utilities
 export {

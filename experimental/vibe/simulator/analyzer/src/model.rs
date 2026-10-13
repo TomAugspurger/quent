@@ -17,7 +17,7 @@ use quent_query_engine_analyzer::{
 };
 use quent_query_engine_ui::EntityRef;
 use quent_simulator_store::SimulatorEvent;
-use quent_ui::ResourceGroupTypeDecl;
+use quent_ui::{FsmTypeSelection, ResourceGroupTypeDecl};
 use uuid::Uuid;
 
 pub use crate::boilerplate::{Engine, Operator, Plan, Port, Query, Worker};
@@ -30,13 +30,23 @@ use crate::{
     view::SimulatorModelQueryView,
 };
 
+const RESOURCE_TYPE_DISPLAY_ORDER: [&str; 7] = [
+    "task_executor_thread",
+    "host_memory",
+    "gpu_memory",
+    "network_channel",
+    "pcie_channel",
+    "storage_channel",
+    "storage",
+];
+
 fn derive_resource_scope_types(
     model: &SimulatorModel,
 ) -> AnalyzerResult<HashMap<String, ResourceGroupTypeDecl>> {
     fn populate(
         node: &quent_analyzer::resource::tree::ResourceTreeNode,
         model: &SimulatorModel,
-        declarations: &mut HashMap<String, (BTreeSet<String>, BTreeSet<String>)>,
+        declarations: &mut HashMap<String, (Vec<FsmTypeSelection>, BTreeSet<String>)>,
     ) -> AnalyzerResult<()> {
         if !node.is_resource {
             let mut contained_types = Vec::new();
@@ -51,7 +61,12 @@ fn derive_resource_scope_types(
                 let (used_by, contains) = declarations.entry(type_name).or_default();
                 for resource_type in contained_types {
                     contains.insert(resource_type.name.clone());
-                    used_by.extend(resource_type.used_by.iter().cloned());
+                    for entity_type in &resource_type.used_by {
+                        let entity_type = FsmTypeSelection::Type(entity_type.to_string());
+                        if !used_by.contains(&entity_type) {
+                            used_by.push(entity_type);
+                        }
+                    }
                 }
             }
         }
@@ -67,14 +82,21 @@ fn derive_resource_scope_types(
     Ok(declarations
         .into_iter()
         .map(|(name, (used_by_entity_types, contains_resource_types))| {
-            (
-                name.clone(),
-                ResourceGroupTypeDecl {
-                    name,
-                    used_by_entity_types: used_by_entity_types.into_iter().collect(),
-                    contains_resource_types: contains_resource_types.into_iter().collect(),
-                },
-            )
+            let mut resource_type_order: Vec<_> = contains_resource_types.into_iter().collect();
+            resource_type_order.sort_by_key(|name| {
+                RESOURCE_TYPE_DISPLAY_ORDER
+                    .iter()
+                    .position(|&resource_type| resource_type == name)
+                    .unwrap_or(usize::MAX)
+            });
+            let declaration = ResourceGroupTypeDecl {
+                name: name.clone(),
+                display_order: std::iter::once(FsmTypeSelection::All)
+                    .chain(used_by_entity_types)
+                    .collect(),
+                contains_resource_types: resource_type_order,
+            };
+            (name, declaration)
         })
         .collect())
 }
@@ -752,18 +774,22 @@ impl SimulatorModelBuilder {
 
         for (task_id, task_builder) in self.tasks.into_iter() {
             let task = Task::from_builder(task_builder)?;
+            let task_type_path = task
+                .type_name()
+                .parse()
+                .map_err(|_| AnalyzerError::InvalidTypeName(task.type_name().to_owned()))?;
             for usage in task.usages() {
                 let resource_type_name = model
                     .resource(usage.resource_id())
                     .map(Entity::type_name)?
                     .to_owned();
-                let set = &mut model
+                let used_by = &mut model
                     .resource_types
                     .get_mut(&resource_type_name)
                     .ok_or_else(|| AnalyzerError::InvalidTypeName(resource_type_name.clone()))?
                     .used_by;
-                if !set.contains(task.type_name()) {
-                    set.insert(task.type_name().to_owned());
+                if !used_by.contains(&task_type_path) {
+                    used_by.push(task_type_path.clone());
                 }
             }
             if let Some(operator_id) = task.operator_id()
