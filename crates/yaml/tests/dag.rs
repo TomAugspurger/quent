@@ -7,7 +7,7 @@ use quent_schema::{DataType, Path, test_utils::path};
 use quent_yaml::{Error, parse_from_str};
 
 const MODEL: &str = "\
-quent: alpha
+quent: '0.1.0'
 model: SimplePlan
 entities:
   Plan:
@@ -85,7 +85,7 @@ fn dag_syntax_builds_and_validates_schema() {
 fn false_dag_marker_adds_no_role() {
     let parsed = parse_from_str(
         "\
-quent: alpha
+quent: '0.1.0'
 model: m
 entities:
   Plain:
@@ -104,7 +104,7 @@ entities:
 fn dag_roles_do_not_generate_topology() {
     let errors = errors_of(
         "\
-quent: alpha
+quent: '0.1.0'
 model: m
 entities:
   Plan:
@@ -159,7 +159,7 @@ fn topology_event_must_not_be_multi() {
 fn hand_written_dag_constraint_is_rejected_on_an_entity() {
     let errors = errors_of(
         "\
-quent: alpha
+quent: '0.1.0'
 model: m
 entities:
   Plan:
@@ -176,7 +176,7 @@ entities:
 fn hand_written_dag_constraint_is_rejected_on_a_field() {
     let errors = errors_of(
         "\
-quent: alpha
+quent: '0.1.0'
 model: m
 entities:
   Plan:
@@ -197,7 +197,7 @@ entities:
 fn fsm_vertex_can_declare_membership() {
     let parsed = parse_from_str(
         "\
-quent: alpha
+quent: '0.1.0'
 model: m
 entities:
   Plan:
@@ -236,7 +236,7 @@ fsms:
 fn fsm_edge_can_declare_topology() {
     let parsed = parse_from_str(
         "\
-quent: alpha
+quent: '0.1.0'
 model: m
 entities:
   Plan:
@@ -287,7 +287,7 @@ fsms:
 fn fsm_edge_topology_must_share_a_state() {
     let errors = errors_of(
         "\
-quent: alpha
+quent: '0.1.0'
 model: m
 entities:
   Plan:

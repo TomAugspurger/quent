@@ -47,7 +47,7 @@ for (const [name, entityCount] of examples) {
 }
 
 const osSchema = JSON.parse(parse_schema_json(`
-quent: alpha
+quent: "0.1.0"
 model: OsRecords
 entities:
   Process:
@@ -61,6 +61,6 @@ assert.ok(osSchema.records.some(([path]) => (
 )));
 
 assert.throws(
-  () => parse_schema_json('quent: alpha\nmodel: broken\nentities: ['),
+  () => parse_schema_json('quent: "0.1.0"\nmodel: broken\nentities: ['),
   /editor\.yaml/,
 );

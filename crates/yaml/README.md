@@ -1,14 +1,11 @@
 # Quent YAML
 
-`quent-yaml` parses a YAML model into a validated Quent schema. The format is
-`alpha` and may change incompatibly.
-
 ## At a glance
 
 Describe a worker with 16 threads and a job that requests four of them:
 
 ```yaml
-quent: alpha
+quent: "0.1.0"
 model: job_workload
 
 entities:
@@ -96,9 +93,9 @@ has no output.
 
 ### Minimal model
 
-Every model declares the YAML format version and a model name. This model
-defines a `Task` entity with two events. Each event can occur once for each
-`Task` instance, but the model does not constrain their order.
+Every model declares the Quent version used when writing the source and a model
+name. This model defines a `Task` entity with two events. Each event can occur
+once for each `Task` instance, but the model does not constrain their order.
 
 - [YAML model](examples/minimal-model/model.yaml)
 - [Instrumentation API usage](examples/minimal-model/src/main.rs)
@@ -432,3 +429,23 @@ relation in that same event. Both endpoint types must be vertices belonging to
 the same DAG type as the edge. These are schema-level checks; instance
 membership and acyclicity must be validated after emitted events are
 reconstructed.
+
+## Compatibility and versioning of application event models as YAML sources
+
+Write the version of Quent used when writing the YAML source in the `quent`
+field:
+
+```yaml
+quent: "0.1.0"
+model: minimal
+
+# ...
+```
+
+After upgrading Quent, the parser checks whether it still accepts sources based
+on that version. For example, Quent 0.2.0 may still accept the source above
+despite breaking changes elsewhere. If it no longer supports sources based on
+0.1.0, it reports an unsupported version. The source then needs migration.
+
+The current parser accepts versions in the range `>=0.1, <0.2`. See the
+[versioning policy](../../CONTRIBUTING.md#versioning).
