@@ -50,8 +50,8 @@
 //! must also depend on `serde` with its derive feature and enable the matching
 //! runtime crate's `serde` feature.
 
-mod common;
-mod data_type;
+pub mod common;
+pub mod data_type;
 mod events;
 mod model;
 mod namespace;
@@ -60,10 +60,9 @@ mod runtime;
 
 use std::path::PathBuf;
 
-use convert_case::Case;
 use quent_constraints::{BaseConstraintsError, Report};
 use quent_fsm::{FsmConstraint, FsmError};
-use quent_schema::{Entity, Identifier, Path, Schema};
+use quent_schema::{Identifier, Path, Schema};
 use quote::quote;
 
 /// Options controlling event and instrumentation source generation.
@@ -220,22 +219,6 @@ pub fn validate_schema(schema: &Schema) -> Result<Vec<String>, GenerateError> {
     let (fsm,) = results;
     fsm?;
     Ok(unregistered_constraints)
-}
-
-/// Returns the model path generated for `schema` relative to the generated module root.
-pub fn generated_model_path(schema: &Schema) -> proc_macro2::TokenStream {
-    let model = common::raw_ident(common::to_case(schema.name(), Case::Pascal));
-    quote! { #model }
-}
-
-/// Returns the entity marker path generated relative to the generated module root.
-pub fn generated_entity_path(entity: &Entity) -> proc_macro2::TokenStream {
-    common::relative_type_path(entity.path(), &[], "")
-}
-
-/// Returns the entity event path generated relative to the generated module root.
-pub fn generated_entity_event_path(entity: &Entity) -> proc_macro2::TokenStream {
-    common::relative_type_path(entity.path(), &[], "Event")
 }
 
 /// Generate event source and, when enabled, instrumentation source for `schema`.

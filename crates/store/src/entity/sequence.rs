@@ -3,67 +3,61 @@
 
 //! Typed sequences of stored entity events.
 
-use std::marker::PhantomData;
 use std::num::NonZeroUsize;
 
-use quent_events::{EntityMarker, Event};
-use quent_time::TimeUnixNanoSec;
+use quent_events::EntityMarker;
+use quent_time::{OrderedCollector, TimeUnixNanoSec};
 use uuid::Uuid;
 
-// TODO(johanpel): Deduplicate entity ID and timestamp metadata with
-// quent_analyzer::entity::native::AnalyzedEntity as part of rapidsai/quent#516.
-/// A non-empty, timestamp-ordered event sequence for one entity marker.
-/// Equal timestamps retain input order; timestamp order is not causal order across contexts.
+use crate::{EntityHandle, Error, Id, Timestamped};
+
+// TODO(johanpel): Deduplicate with
+//                 quent_analyzer::entity::native::AnalyzedEntity
+//                 as part of rapidsai/quent#516.
+/// A non-empty, timestamp-ordered event sequence for one entity instance.
 pub struct EventSequence<E: EntityMarker> {
-    id: Uuid,
-    events: Vec<Event<E::Payload>>,
-    earliest_timestamp: TimeUnixNanoSec,
-    latest_timestamp: TimeUnixNanoSec,
-    marker: PhantomData<fn() -> E>,
+    /// The ID of entity that emitted these events.
+    id: Id<E>,
+    /// The ordered events.
+    events: Vec<Timestamped<E::Payload>>,
 }
 
-impl<E: EntityMarker> Clone for EventSequence<E>
+impl<E> Clone for EventSequence<E>
 where
+    E: EntityMarker,
     E::Payload: Clone,
 {
     fn clone(&self) -> Self {
         Self {
-            id: self.id,
+            id: self.id(),
             events: self.events.clone(),
-            earliest_timestamp: self.earliest_timestamp,
-            latest_timestamp: self.latest_timestamp,
-            marker: PhantomData,
         }
     }
 }
 
 impl<E: EntityMarker> EventSequence<E> {
-    pub(crate) fn from_ordered_events(id: Uuid, events: Vec<Event<E::Payload>>) -> Self {
-        debug_assert!(!events.is_empty());
-        debug_assert!(events.iter().all(|event| event.id == id));
-        debug_assert!(
-            events
-                .windows(2)
-                .all(|pair| pair[0].timestamp <= pair[1].timestamp)
-        );
-        let earliest_timestamp = events.first().unwrap().timestamp;
-        let latest_timestamp = events.last().unwrap().timestamp;
-        Self {
-            id,
-            events,
-            earliest_timestamp,
-            latest_timestamp,
-            marker: PhantomData,
+    pub(crate) fn try_from_ordered(
+        id: Uuid,
+        events: OrderedCollector<Timestamped<E::Payload>>,
+    ) -> Result<Self, Error> {
+        let events = events.into_inner();
+        if events.is_empty() {
+            return Err(Error::EmptyEventSequence(id));
         }
+        Ok(Self {
+            id: Id::new(id),
+            events,
+        })
     }
 
-    /// Returns the entity UUID.
-    pub fn id(&self) -> Uuid {
-        self.id
+    /// Returns the typed entity ID.
+    pub fn id(&self) -> Id<E> {
+        // don't require clone/copy on E
+        Id::new(self.id.uuid())
     }
 
-    /// Returns events in timestamp order.
-    pub fn events(&self) -> &[Event<E::Payload>] {
+    /// Returns a slice of events in timestamp order.
+    pub fn events(&self) -> &[Timestamped<E::Payload>] {
         &self.events
     }
 
@@ -74,16 +68,71 @@ impl<E: EntityMarker> EventSequence<E> {
 
     /// Returns the first event timestamp.
     pub fn earliest_timestamp(&self) -> TimeUnixNanoSec {
-        self.earliest_timestamp
+        // Self can only be constructed with at least one event so unwrap is fine.
+        self.events.first().unwrap().timestamp
     }
 
     /// Returns the last event timestamp.
     pub fn latest_timestamp(&self) -> TimeUnixNanoSec {
-        self.latest_timestamp
+        // Self can only be constructed with at least one event so unwrap is fine.
+        self.events.last().unwrap().timestamp
     }
 
     /// Consumes the sequence and returns its events in timestamp order.
-    pub fn into_events(self) -> Vec<Event<E::Payload>> {
+    pub fn into_events(self) -> Vec<Timestamped<E::Payload>> {
         self.events
+    }
+}
+
+impl<E: EntityMarker> EntityHandle for EventSequence<E> {
+    type Entity = E;
+
+    fn id(&self) -> Id<E> {
+        self.id()
+    }
+
+    fn earliest_timestamp(&self) -> TimeUnixNanoSec {
+        Self::earliest_timestamp(self)
+    }
+
+    fn latest_timestamp(&self) -> TimeUnixNanoSec {
+        Self::latest_timestamp(self)
+    }
+
+    fn num_events(&self) -> NonZeroUsize {
+        self.event_count()
+    }
+}
+
+impl<E: EntityMarker> AsRef<Self> for EventSequence<E> {
+    fn as_ref(&self) -> &Self {
+        self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use quent_events::EventPayload;
+
+    use super::*;
+
+    struct TestEntity;
+
+    impl EntityMarker for TestEntity {
+        type Payload = Self;
+    }
+
+    impl EventPayload for TestEntity {
+        const NAME: &'static str = "TestEntity";
+    }
+
+    // Checks an empty collector cannot create a sequence.
+    #[test]
+    fn rejects_empty_sequence() {
+        let id = Uuid::from_u128(1);
+        assert!(matches!(
+            EventSequence::<TestEntity>::try_from_ordered(id, OrderedCollector::default()),
+            Err(Error::EmptyEventSequence(actual)) if actual == id
+        ));
     }
 }

@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! Generates schema-based typed APIs for retrieving stored events.
+//! Generates typed entity stores and event access from Quent schemas.
 //!
 //! Add `quent-store-build` to `[build-dependencies]`, call [`generate`] from
 //! `build.rs`, and include the generated file from Cargo's `OUT_DIR`.
@@ -41,6 +41,7 @@ use std::path::PathBuf;
 use quent_schema::Schema;
 use quote::quote;
 
+mod entities;
 mod event_loaders;
 
 /// Options controlling stored-event retrieval source generation.
@@ -66,11 +67,29 @@ pub struct Options {
     /// `quent-store` `io-*` feature.
     pub filesystem: bool,
 
+    /// Generate the selected entity stores and typed access to their events.
+    ///
+    /// Defaults to a native in-memory store. Disabling all stores also disables
+    /// typed entity event access.
+    ///
+    /// Access traits and event handles are available in each
+    /// entity's module, such as `model::connection`.
+    pub entity_store: EntityStoreImplementations,
+
     /// Directory the generated file is written into.
     pub out_dir: PathBuf,
 
     /// File name to write; defaults to the lowercase schema name with a `.rs` extension.
     pub file_name: Option<String>,
+}
+
+/// Store backends to generate alongside entity-specific event access.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct EntityStoreImplementations {
+    /// Generate a Rust-native in-memory store.
+    pub native: bool,
+    // TODO(johanpel): Add options for Arrow and possibly other formats to
+    // directly query from here.
 }
 
 impl Default for Options {
@@ -81,6 +100,7 @@ impl Default for Options {
             record_derives: Default::default(),
             combined_event: true,
             filesystem: true,
+            entity_store: EntityStoreImplementations { native: true },
             out_dir: PathBuf::from(std::env::var("OUT_DIR").unwrap_or_default()),
             file_name: None,
         }
@@ -92,6 +112,12 @@ impl Default for Options {
 pub enum GenerateError {
     #[error("filesystem loading requires combined-event generation")]
     FilesystemRequiresCombinedEvent,
+    #[error("generated entity-event name `{name}` conflicts between {first} and {second}")]
+    EntityEventsNameConflict {
+        name: String,
+        first: String,
+        second: String,
+    },
     #[error(transparent)]
     EventModel(#[from] quent_instrumentation_build::GenerateError),
     #[error("generated stored-event retrieval code did not form a valid Rust file")]
@@ -129,8 +155,8 @@ pub fn generate(schema: &Schema, opts: &Options) -> Result<GenerateInfo, Generat
 ///
 /// # Errors
 ///
-/// Returns an error when the options are inconsistent, event generation fails, or the combined
-/// output is not valid Rust.
+/// Returns an error when the options are inconsistent, generated names conflict, event generation
+/// fails, or the combined output is not valid Rust.
 pub fn generate_str(schema: &Schema, opts: &Options) -> Result<String, GenerateError> {
     if opts.filesystem && !opts.combined_event {
         return Err(GenerateError::FilesystemRequiresCombinedEvent);
@@ -146,8 +172,11 @@ pub fn generate_str(schema: &Schema, opts: &Options) -> Result<String, GenerateE
         ..quent_instrumentation_build::Options::default()
     };
     let events = quent_instrumentation_build::generate_str(schema, &event_opts)?;
-    let events =
+    let mut events =
         syn::parse_str::<syn::File>(&events).map_err(GenerateError::InvalidGeneratedCode)?;
+    if opts.entity_store.native {
+        entities::generate(schema, &event_opts, &mut events, &opts.entity_store)?;
+    }
 
     let loaders = event_loaders::generate(schema, opts.filesystem);
 

@@ -5,6 +5,16 @@
 
 pub mod context;
 pub mod entity;
+pub mod error;
 pub mod event;
 
-pub use entity::{EntityHandle, EntityStore};
+pub use quent_time::TimeUnixNanoSec;
+
+pub use crate::{
+    entity::{EntityHandle, EntityStore, Id},
+    error::Error,
+    event::Timestamped,
+};
+
+/// Result returned by store operations.
+pub type Result<T> = std::result::Result<T, Error>;

@@ -18,13 +18,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("cargo:warning={warning}");
     }
 
-    let options = Options {
-        // Generate `DemoEvent` so the example can load all model events through
-        // one iterator. Entity-specific loading does not require this option.
-        combined_event: true,
-        ..Options::default()
-    };
-    let generated = generate(&parsed.schema, &options)?;
+    let generated = generate(&parsed.schema, &Options::default())?;
     if !generated.warnings.is_empty() {
         println!("cargo:warning= {}", generated.warnings.join("\n"));
     }

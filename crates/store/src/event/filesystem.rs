@@ -3,52 +3,25 @@
 
 //! Filesystem-backed event storage.
 
-use std::marker::PhantomData;
-use std::path::{Path, PathBuf};
+use std::{
+    marker::PhantomData,
+    path::{Path, PathBuf},
+};
 
 use quent_build_info::{ArtifactInfo, SIDECAR_FILE_NAME};
 use quent_events::{CombinedEventModel, Event, EventModel, EventPayload};
-use quent_io::ImporterProvider;
-use quent_io::filesystem::{Format, importer};
+use quent_io::{
+    ImporterProvider,
+    filesystem::{Format, importer},
+};
 use serde::de::DeserializeOwned;
 use uuid::Uuid;
 
-use crate::context::ContextSet;
-
-use super::{CombinedEventLoader, EntityMarkerInModel, EventIterator, EventLoader};
-
-/// Result returned by filesystem event stores.
-pub type Result<T> = std::result::Result<T, Error>;
-
-/// An error encountered while loading filesystem events.
-#[derive(Debug, thiserror::Error)]
-pub enum Error {
-    #[error("context `{0}` was not found")]
-    ContextNotFound(Uuid),
-    #[error("context path `{0}` is not a directory")]
-    ContextNotDirectory(PathBuf),
-    #[error("context model `{actual}` does not match expected model `{expected}`")]
-    ModelMismatch { expected: String, actual: String },
-    #[error("event file `{path}` requires the `{feature}` feature for `{format}` data")]
-    DisabledFormat {
-        path: PathBuf,
-        format: String,
-        feature: &'static str,
-    },
-    #[error("failed to {operation} `{path}`: {source}")]
-    Io {
-        operation: &'static str,
-        path: PathBuf,
-        #[source]
-        source: std::io::Error,
-    },
-    #[error("failed to import events from `{path}`: {source}")]
-    Importer {
-        path: PathBuf,
-        #[source]
-        source: quent_io::ImporterError,
-    },
-}
+use crate::{
+    Error, Result,
+    context::ContextSet,
+    event::{CombinedEventLoader, EntityMarkerInModel, EventIterator, EventLoader},
+};
 
 /// Associates a generated model with its filesystem event importers.
 ///
@@ -88,7 +61,6 @@ impl<M: CombinedEventModel> EventImporter<M> {
     where
         E: EntityMarkerInModel<M>,
         E::Payload: DeserializeOwned + Into<M::CombinedEvent> + 'static,
-        M::CombinedEvent: 'static,
     {
         Self {
             entity: E::Payload::NAME,
@@ -107,7 +79,6 @@ fn import_event_files<M, E>(files: Vec<EventFile>) -> Result<EventIterator<M::Co
 where
     M: CombinedEventModel,
     E: DeserializeOwned + Into<M::CombinedEvent> + 'static,
-    M::CombinedEvent: 'static,
 {
     Ok(Box::new(import_files::<E>(files).map(|event| {
         event.map(|event| Event::new(event.id, event.timestamp, event.data.into()))
@@ -331,13 +302,13 @@ fn format_feature(extension: &str) -> Option<&'static str> {
 mod tests {
     use std::fs;
 
-    use crate::entity::native;
-    use crate::entity::{BorrowedEventSequenceStore, EntityHandle, EntityStore};
     use quent_build_info::{BuildInfo, ModelInfo, ModelSource};
     use quent_events::{CombinedEventModel, EntityMarker, Event, EventModel, EventPayload};
     use quent_instrumentation::{ContextExporter, ContextInner};
     use quent_io::{ExporterOptions, FileSystemExporterOptions, FileSystemFormat};
     use serde::{Deserialize, Serialize};
+
+    use crate::entity::{BorrowedEventSequenceStore, EntityHandle, EntityStore, native};
 
     use super::*;
 
@@ -350,10 +321,24 @@ mod tests {
         const NAME: &'static str = "Alpha";
     }
 
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
     struct Alpha;
 
     impl EntityMarker for Alpha {
         type Payload = AlphaEvent;
+    }
+
+    impl native::NativeEntityMarker for Alpha {
+        type Index = AlphaIndex;
+    }
+
+    #[derive(Default)]
+    struct AlphaIndex;
+
+    impl native::EventIndex<Alpha> for AlphaIndex {
+        fn record(&mut self, _: &AlphaEvent, _: usize) -> Result<()> {
+            Ok(())
+        }
     }
 
     impl EntityMarkerInModel<TestModel> for Alpha {}
@@ -365,6 +350,7 @@ mod tests {
         const NAME: &'static str = "Beta";
     }
 
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
     struct Beta;
 
     impl EntityMarker for Beta {
@@ -526,25 +512,18 @@ mod tests {
         );
         let contexts = ContextSet::try_new([second_context, first_context]).unwrap();
         let store = Loader::<TestModel>::new(root.path(), contexts);
-        let events = EventLoader::<Alpha>::events(&store)
-            .unwrap()
-            .collect::<Result<Vec<_>>>()
-            .unwrap();
-        let entities = native::Store::<Alpha>::new(events);
+        let entities = native::NativeStore::<Alpha>::try_from_loader(&store).unwrap();
 
         let handles = EntityStore::<Alpha>::entities(&entities)
             .unwrap()
             .collect::<Vec<_>>();
 
         assert_eq!(handles.len(), 2);
-        assert!(handles.iter().any(|handle| handle.id() == first_entity));
-        assert!(handles.iter().any(|handle| handle.id() == second_entity));
-        let first_handle = EntityStore::<Alpha>::entity(&entities, first_entity)
-            .unwrap()
-            .unwrap();
+        assert!(handles.iter().any(|handle| handle.uuid() == first_entity));
+        assert!(handles.iter().any(|handle| handle.uuid() == second_entity));
         assert_eq!(
             entities
-                .event_sequence(&first_handle)
+                .event_sequence(first_entity.into())
                 .unwrap()
                 .events()
                 .iter()
@@ -556,7 +535,8 @@ mod tests {
             EntityStore::<Alpha>::entity(&entities, first_entity)
                 .unwrap()
                 .unwrap()
-                .id(),
+                .id()
+                .uuid(),
             first_entity
         );
     }
