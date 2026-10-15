@@ -7,6 +7,8 @@ services:
     ports:
       - "8080:8080"
     restart: unless-stopped
+    environment:
+      QUENT_MCP_ALLOWED_HOSTS: "${QUENT_MCP_ALLOWED_HOSTS:-}"
     command: "/quent/quent-simulator-server --log-level debug"
 
   simulator:

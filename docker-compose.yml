@@ -13,6 +13,7 @@ services:
       - ./data/simulator-events:/quent/events
     environment:
       QUENT_ANALYZER_CORS_ADDRESS: "http://localhost:5173,http://localhost:3000"
+      QUENT_MCP_ALLOWED_HOSTS: "${QUENT_MCP_ALLOWED_HOSTS:-}"
     command: "/quent/quent-simulator-server --log-level debug --cors-address http://localhost:5173,http://localhost:3000"
 
   simulator:
