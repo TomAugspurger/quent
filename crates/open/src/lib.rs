@@ -5,6 +5,8 @@
 //!
 //! Given a context directory, read `model.qmi`, generate a viewer crate pinned
 //! to the recorded quent/analyzer commits, build and serve it, and open a browser.
+//! Revisions containing the MCP routes mount an agent-facing endpoint on the
+//! generated viewer's existing HTTP server.
 //!
 //! The first viewer build fetches git sources and compiles the embedded UI.
 //! `git`, `pnpm`, and `node` must be on `PATH`.

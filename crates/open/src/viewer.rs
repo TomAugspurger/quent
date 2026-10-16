@@ -31,6 +31,7 @@ pub struct ViewerGroup {
 /// A built viewer ready to serve: its binary, cache dir, and the contexts it covers.
 struct BuiltViewer {
     bin: PathBuf,
+    has_mcp_routes: bool,
     crate_dir: PathBuf,
     contexts: Vec<PathBuf>,
     label: String,
@@ -98,11 +99,13 @@ async fn build_one(group: ViewerGroup) -> Result<BuiltViewer> {
         &crate_dir,
         compatibility.io_package,
         compatibility.has_nvtx_routes,
+        compatibility.has_mcp_routes,
         compatibility.context_indexing,
     )?;
     let bin = cargo_build(&crate_dir).await?;
     Ok(BuiltViewer {
         bin,
+        has_mcp_routes: compatibility.has_mcp_routes,
         crate_dir,
         contexts,
         label,
@@ -113,12 +116,21 @@ async fn build_one(group: ViewerGroup) -> Result<BuiltViewer> {
 async fn serve_one(viewer: BuiltViewer, open_browser: bool, host: IpAddr) -> Result<()> {
     let BuiltViewer {
         bin,
+        has_mcp_routes,
         crate_dir,
         contexts,
         label,
     } = viewer;
     let output_root = stage_output_root(&crate_dir, &contexts)?;
-    let result = serve(&output_root, &bin, &label, open_browser, host).await;
+    let result = serve(
+        &output_root,
+        &bin,
+        has_mcp_routes,
+        &label,
+        open_browser,
+        host,
+    )
+    .await;
     // Best-effort cleanup of this run's staged root; keep the cached build.
     let _ = std::fs::remove_dir_all(&output_root);
     result
@@ -280,6 +292,7 @@ fn symlink_dir(_src: &Path, _link: &Path) -> Result<()> {
 async fn serve(
     output_root: &Path,
     bin: &Path,
+    has_mcp_routes: bool,
     label: &str,
     open_browser: bool,
     host: IpAddr,
@@ -311,6 +324,9 @@ async fn serve(
 
     if wait_until_ready(reachable).await {
         println!("ready: {label}  {url}");
+        if has_mcp_routes {
+            println!("mcp: {label}  {url}mcp");
+        }
         if open_browser && let Err(e) = open_browser_without_token(&url) {
             eprintln!("could not open a browser ({e}); open {url} manually");
         }

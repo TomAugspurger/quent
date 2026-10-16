@@ -31,6 +31,8 @@ const NVTX_ROUTES_BOUNDARY: &str = "f40e69c2d4405c765c6270221e2a58e58ef704a6";
 ///
 /// Introduced after [commit `cee18e0`](https://github.com/rapidsai/quent/commit/cee18e047c5407dc91b8d9e6e150892444775bd1).
 const CONTEXT_INVENTORY_PREDECESSOR: &str = "cee18e047c5407dc91b8d9e6e150892444775bd1";
+/// First `upstream/main` revision containing the MCP routes.
+const MCP_ROUTES_BOUNDARY: &str = "abec68ec57be4132708d85bb48e8f736d5e9f57e";
 
 pub(crate) fn nvtx_code(enabled: bool) -> NvtxCode {
     if enabled {
@@ -117,6 +119,7 @@ pub(crate) struct ContextIndexingCode {
 
 pub(crate) struct WrapperCompatibility {
     pub(crate) has_nvtx_routes: bool,
+    pub(crate) has_mcp_routes: bool,
     pub(crate) io_package: &'static str,
     pub(crate) context_indexing: ContextIndexing,
 }
@@ -125,6 +128,7 @@ impl WrapperCompatibility {
     pub(crate) async fn resolve(repository: &Path, spec: &ViewerSpec) -> Result<Self> {
         let revision = revision::PinnedRevision::fetch(repository, &spec.quent).await?;
         let has_nvtx_routes = revision.contains(NVTX_ROUTES_BOUNDARY).await?;
+        let has_mcp_routes = revision.contains(MCP_ROUTES_BOUNDARY).await?;
         let io_package = if revision.contains(IO_PACKAGE_BOUNDARY).await? {
             IO_PACKAGE
         } else {
@@ -140,6 +144,7 @@ impl WrapperCompatibility {
         };
         Ok(Self {
             has_nvtx_routes,
+            has_mcp_routes,
             io_package,
             context_indexing,
         })
