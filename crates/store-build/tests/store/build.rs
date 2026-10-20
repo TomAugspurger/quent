@@ -8,64 +8,61 @@ mod schema;
 fn main() {
     println!("cargo:rerun-if-changed=schema.rs");
     let schema = schema::schema();
-    let serde = cfg!(feature = "serde");
     generate(
         &schema,
         &Options {
             events: EventOptions {
-                serde,
+                serde: true,
                 ..Options::default().events
             },
-            filesystem: serde,
+            filesystem: true,
             file_name: Some("model.rs".to_owned()),
             ..Options::default()
         },
     )
     .unwrap();
 
-    // The demo schema is used by filesystem-based model-store tests, which
-    // require Serde. Without Serde, the fixture schema still covers model-store
-    // compilation and all entity-store runtime tests.
-    if serde {
-        let demo_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../../instrumentation-build/example/model.yaml");
-        println!("cargo:rerun-if-changed={}", demo_path.display());
-        let demo = quent_yaml::parse_from_file(&demo_path).unwrap();
-        generate(&demo.schema, &Options::default()).unwrap();
-    }
+    let demo_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../instrumentation-build/example/model.yaml");
+    println!("cargo:rerun-if-changed={}", demo_path.display());
+    let demo = quent_yaml::parse_from_file(&demo_path).unwrap();
+    generate(&demo.schema, &Options::default()).unwrap();
 
+    // Compile each event/store combination; filesystem loading also needs serde and combined events.
     let mut modules = String::new();
-    // Compile every other combination of native stores and loading options.
-    // Filesystem loading requires Serde and combined events; the full build is
-    // above.
-    for native in [false, true] {
-        for (combined_event, filesystem) in [(false, false), (true, false), (true, true)] {
-            if filesystem && !serde {
-                continue;
+    for serde in [false, true] {
+        for native in [false, true] {
+            for combined_event in [false, true] {
+                let filesystems: &[bool] = if serde && combined_event && !native {
+                    &[false, true]
+                } else {
+                    &[false]
+                };
+                for filesystem in filesystems {
+                    let name = format!(
+                        "serde_{serde}_native_{native}_combined_{combined_event}_filesystem_{filesystem}"
+                    );
+                    generate(
+                        &schema,
+                        &Options {
+                            events: EventOptions {
+                                debug: true,
+                                serde,
+                                combined_event,
+                                ..Options::default().events
+                            },
+                            entity_store: EntityStoreImplementations { native },
+                            filesystem: *filesystem,
+                            file_name: Some(format!("{name}.rs")),
+                            ..Options::default()
+                        },
+                    )
+                    .unwrap();
+                    modules.push_str(&format!(
+                        "mod {name} {{ include!(concat!(env!(\"OUT_DIR\"), \"/{name}.rs\")); }}\n"
+                    ));
+                }
             }
-            if native && combined_event && filesystem == serde {
-                continue;
-            }
-            let name = format!("native_{native}_combined_{combined_event}_filesystem_{filesystem}");
-            generate(
-                &schema,
-                &Options {
-                    events: EventOptions {
-                        debug: true,
-                        serde,
-                        combined_event,
-                        ..Options::default().events
-                    },
-                    entity_store: EntityStoreImplementations { native },
-                    filesystem,
-                    file_name: Some(format!("{name}.rs")),
-                    ..Options::default()
-                },
-            )
-            .unwrap();
-            modules.push_str(&format!(
-                "mod {name} {{ include!(concat!(env!(\"OUT_DIR\"), \"/{name}.rs\")); }}\n"
-            ));
         }
     }
     std::fs::write(
