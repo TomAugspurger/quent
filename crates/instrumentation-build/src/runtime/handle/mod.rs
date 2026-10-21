@@ -67,17 +67,31 @@ fn ordinary_handle(entity: &Entity) -> Result<TokenStream, GenerateError> {
         .events()
         .map(|event| {
             let method = raw_ident(to_case(event.name(), Case::Snake));
+            let method_at = raw_ident(format!("{}_at", to_case(event.name(), Case::Snake)));
             let variant = raw_ident(to_case(event.name(), Case::Pascal));
-            let fallback = match event.cardinality() {
-                Cardinality::Once => format!(
-                    "Emit the once-cardinality `{}` event for this instance.",
-                    event.name()
+            let (fallback, at_fallback) = match event.cardinality() {
+                Cardinality::Once => (
+                    format!(
+                        "Emit the once-cardinality `{}` event for this instance.",
+                        event.name()
+                    ),
+                    format!(
+                        "Emit the once-cardinality `{}` event for this instance at a \
+                         caller-supplied Unix-nanosecond timestamp.",
+                        event.name()
+                    ),
                 ),
-                Cardinality::Multi => {
-                    format!("Emit a `{}` event for this instance.", event.name())
-                }
+                Cardinality::Multi => (
+                    format!("Emit a `{}` event for this instance.", event.name()),
+                    format!(
+                        "Emit a `{}` event for this instance at a caller-supplied \
+                         Unix-nanosecond timestamp.",
+                        event.name()
+                    ),
+                ),
             };
             let docs = doc_attr_or(event.annotations().docs(), &fallback);
+            let at_docs = doc_attr_or(event.annotations().docs(), &at_fallback);
 
             let params = event_params(entity, event, None)?;
             let fields = event_fields(event, None);
@@ -104,22 +118,47 @@ fn ordinary_handle(entity: &Entity) -> Result<TokenStream, GenerateError> {
                             self.inner.emit_once::<#bit>(#event_name, #construct)
                         }
 
+                        #at_docs
+                        pub fn #method_at(
+                            &mut self,
+                            timestamp_ns: u64,
+                            #(#params),*
+                        ) -> ::core::result::Result<(), ::quent_instrumentation::HandleError> {
+                            self.inner.emit_once_at::<#bit>(
+                                #event_name,
+                                timestamp_ns,
+                                #construct,
+                            )
+                        }
+
                         #[doc = #emitted_doc]
                         pub fn #emitted_method(&self) -> bool {
                             self.inner.is_emitted::<#bit>()
                         }
                     }
                 }
-                Cardinality::Multi => quote! {
-                    #docs
-                    pub fn #method(
-                        &self,
-                        #(#params),*
-                    ) -> ::core::result::Result<(), ::quent_instrumentation::HandleError> {
-                        self.inner.emit(#construct);
-                        ::core::result::Result::Ok(())
+                Cardinality::Multi => {
+                    quote! {
+                        #docs
+                        pub fn #method(
+                            &self,
+                            #(#params),*
+                        ) -> ::core::result::Result<(), ::quent_instrumentation::HandleError> {
+                            self.inner.emit(#construct);
+                            ::core::result::Result::Ok(())
+                        }
+
+                        #at_docs
+                        pub fn #method_at(
+                            &self,
+                            timestamp_ns: u64,
+                            #(#params),*
+                        ) -> ::core::result::Result<(), ::quent_instrumentation::HandleError> {
+                            self.inner.emit_at(timestamp_ns, #construct);
+                            ::core::result::Result::Ok(())
+                        }
                     }
-                },
+                }
             })
         })
         .collect::<Result<Vec<_>, GenerateError>>()?;
@@ -174,5 +213,43 @@ fn event_construct(
         quote! { #event_ty::#variant }
     } else {
         quote! { #event_ty::#variant { #(#fields),* } }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use quent_schema::{
+        Cardinality,
+        builder::{AnnotationsBuilder, EntityBuilder, EventBuilder},
+    };
+
+    use super::ordinary_handle;
+
+    #[test]
+    fn schema_docs_apply_to_regular_and_timestamped_methods() {
+        for cardinality in [Cardinality::Once, Cardinality::Multi] {
+            let annotations = AnnotationsBuilder::new()
+                .with_docs("Application-defined event documentation.")
+                .build()
+                .unwrap();
+            let event = EventBuilder::try_new("updated", cardinality)
+                .unwrap()
+                .with_annotations(annotations)
+                .build()
+                .unwrap();
+            let entity = EntityBuilder::try_new("Resource")
+                .unwrap()
+                .with_event(event)
+                .build()
+                .unwrap();
+
+            let source = ordinary_handle(&entity).unwrap().to_string();
+            assert_eq!(
+                source
+                    .matches("Application-defined event documentation.")
+                    .count(),
+                2
+            );
+        }
     }
 }

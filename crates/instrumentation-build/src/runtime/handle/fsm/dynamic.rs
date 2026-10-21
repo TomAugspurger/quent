@@ -228,11 +228,15 @@ fn transition_method(
     sources: &[usize],
 ) -> Result<TokenStream, GenerateError> {
     let method = raw_ident(to_case(event.name(), Case::Snake));
+    let method_at = raw_ident(format!("{}_at", to_case(event.name(), Case::Snake)));
     let variant = raw_ident(to_case(event.name(), Case::Pascal));
-    let docs = doc_attr_or(
-        event.annotations().docs(),
-        &format!("Transition this FSM into `{}`.", event.name()),
+    let fallback = format!("Transition this FSM into `{}`.", event.name());
+    let at_fallback = format!(
+        "Transition this FSM into `{}` at a caller-supplied Unix-nanosecond timestamp.",
+        event.name()
     );
+    let docs = doc_attr_or(event.annotations().docs(), &fallback);
+    let at_docs = doc_attr_or(event.annotations().docs(), &at_fallback);
     let params = event_params(entity, event, Some(SEQUENCE_FIELD_NAME))?;
     let sequence_placeholder = quote! { 0 };
     let fields = event_fields(event, Some((SEQUENCE_FIELD_NAME, &sequence_placeholder)));
@@ -242,30 +246,32 @@ fn transition_method(
         "{}_state",
         to_case(entity.path().name(), Case::Snake)
     ));
-    let sources = sources.iter().map(|source| {
-        if *source == 0 {
-            quote! {
-                <() as ::quent_instrumentation::FsmState<#marker_ty>>::DYNAMIC_STATE_INDEX
+    let sources = sources
+        .iter()
+        .map(|source| {
+            if *source == 0 {
+                quote! {
+                    <() as ::quent_instrumentation::FsmState<#marker_ty>>::DYNAMIC_STATE_INDEX
+                }
+            } else {
+                let source = entity
+                    .events()
+                    .nth(*source - 1)
+                    .expect("validated FSM transition source index");
+                let source_marker = raw_ident(to_case(source.name(), Case::Pascal));
+                quote! {
+                    <#state_module::#source_marker as
+                        ::quent_instrumentation::FsmState<#marker_ty>>::DYNAMIC_STATE_INDEX
+                }
             }
-        } else {
-            let source = entity
-                .events()
-                .nth(*source - 1)
-                .expect("validated FSM transition source index");
-            let source_marker = raw_ident(to_case(source.name(), Case::Pascal));
-            quote! {
-                <#state_module::#source_marker as
-                    ::quent_instrumentation::FsmState<#marker_ty>>::DYNAMIC_STATE_INDEX
-            }
-        }
-    });
+        })
+        .collect::<Vec<_>>();
     let target_marker = raw_ident(to_case(event.name(), Case::Pascal));
     let target = quote! {
         <#state_module::#target_marker as
             ::quent_instrumentation::FsmState<#marker_ty>>::DYNAMIC_STATE_INDEX
     };
     let target_name = event.name().to_string();
-
     Ok(quote! {
         #docs
         ///
@@ -287,6 +293,31 @@ fn transition_method(
                 );
             }
             self.inner.transition_mut(#construct);
+            self.state = #target;
+            ::core::result::Result::Ok(())
+        }
+
+        #at_docs
+        ///
+        /// # Errors
+        ///
+        /// Returns [`FsmTransitionError`] when this transition is not valid
+        /// from the current dynamic state.
+        pub fn #method_at(
+            &mut self,
+            timestamp_ns: u64,
+            #(#params),*
+        ) -> ::core::result::Result<(), ::quent_instrumentation::FsmTransitionError> {
+            if ![#(#sources),*].contains(&self.state) {
+                return ::core::result::Result::Err(
+                    ::quent_instrumentation::FsmTransitionError::new(
+                        #entity_name,
+                        self.state_name(),
+                        #target_name,
+                    ),
+                );
+            }
+            self.inner.transition_mut_at(timestamp_ns, #construct);
             self.state = #target;
             ::core::result::Result::Ok(())
         }

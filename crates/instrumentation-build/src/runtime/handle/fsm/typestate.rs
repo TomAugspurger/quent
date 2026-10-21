@@ -178,22 +178,37 @@ fn transition_method(
     state_module: &syn::Ident,
 ) -> Result<TokenStream, GenerateError> {
     let method = raw_ident(to_case(event.name(), Case::Snake));
+    let method_at = raw_ident(format!("{}_at", to_case(event.name(), Case::Snake)));
     let variant = raw_ident(to_case(event.name(), Case::Pascal));
     let target_marker = raw_ident(to_case(event.name(), Case::Pascal));
-    let docs = doc_attr_or(
-        event.annotations().docs(),
-        &format!("Transition this FSM into `{}`.", event.name()),
+    let fallback = format!("Transition this FSM into `{}`.", event.name());
+    let at_fallback = format!(
+        "Transition this FSM into `{}` at a caller-supplied Unix-nanosecond timestamp.",
+        event.name()
     );
+    let docs = doc_attr_or(event.annotations().docs(), &fallback);
+    let at_docs = doc_attr_or(event.annotations().docs(), &at_fallback);
     let params = event_params(entity, event, Some(SEQUENCE_FIELD_NAME))?;
     let sequence_placeholder = quote! { 0 };
     let fields = event_fields(event, Some((SEQUENCE_FIELD_NAME, &sequence_placeholder)));
     let construct = event_construct(event_ty, &variant, &fields);
-
     Ok(quote! {
         #docs
         pub fn #method(self, #(#params),*) -> #handle_ty<#entity_ty, #state_module::#target_marker> {
             #handle_ty {
                 inner: self.inner.transition(#construct),
+                _state: ::core::marker::PhantomData,
+            }
+        }
+
+        #at_docs
+        pub fn #method_at(
+            self,
+            timestamp_ns: u64,
+            #(#params),*
+        ) -> #handle_ty<#entity_ty, #state_module::#target_marker> {
+            #handle_ty {
+                inner: self.inner.transition_at(timestamp_ns, #construct),
                 _state: ::core::marker::PhantomData,
             }
         }
