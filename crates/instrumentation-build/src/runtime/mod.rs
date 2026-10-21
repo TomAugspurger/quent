@@ -8,6 +8,7 @@ use convert_case::Case;
 use proc_macro2::TokenStream;
 use quent_schema::{Entity, Schema};
 use quote::quote;
+use std::collections::HashSet;
 use syn::Ident;
 
 use crate::{
@@ -24,15 +25,26 @@ pub(crate) fn entity_runtime_types(
     schema: &Schema,
     entity: &Entity,
 ) -> Result<TokenStream, GenerateError> {
-    let handle = handle::entity_handle(entity)?;
-    if entity
+    let event_methods = entity
         .events()
-        .any(|event| to_case(event.name(), Case::Snake) == "id")
-    {
+        .map(|event| to_case(event.name(), Case::Snake))
+        .collect::<HashSet<_>>();
+    if event_methods.contains("id") {
         return Err(GenerateError::HandleIdCollision {
             entity: entity.path().clone(),
         });
     }
+    if let Some(method) = event_methods
+        .iter()
+        .map(|method| format!("{method}_at"))
+        .find(|method_at| event_methods.contains(method_at))
+    {
+        return Err(GenerateError::TimestampedEventMethodCollision {
+            entity: entity.path().clone(),
+            method,
+        });
+    }
+    let handle = handle::entity_handle(entity)?;
     let entity_impl = entity_impl(schema, entity, &handle.associated_type);
     let handle = handle.tokens;
     Ok(quote! {

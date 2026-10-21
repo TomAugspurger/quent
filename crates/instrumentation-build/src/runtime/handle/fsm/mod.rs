@@ -158,6 +158,8 @@ mod tests {
         assert!(source.contains("impl FsmHandle<Query>"));
         assert!(source.contains("pub fn submitted(self, text: String)"));
         assert!(source.contains("-> FsmHandle<Query, query_state::Submitted>"));
+        assert!(source.contains("pub fn submitted_at("));
+        assert!(source.contains(".transition_at("));
         assert!(source.contains("impl FsmHandle<Query, query_state::Submitted>"));
         assert!(source.contains(".transition(QueryEvent::Submitted"));
         assert!(source.contains("seq: 0"));
@@ -173,7 +175,9 @@ mod tests {
         assert!(source.contains("pub fn try_into<S>("));
         assert!(source.contains("S: ::quent_instrumentation::FsmState<Query>"));
         assert!(source.contains("pub fn submitted(\n        &mut self"));
+        assert!(source.contains("pub fn submitted_at(\n        &mut self"));
         assert!(source.contains("self.inner.transition_mut("));
+        assert!(source.contains("self.inner.transition_mut_at(timestamp_ns,"));
         assert!(source.contains("impl FsmHandle<Query, query_state::Ready>"));
     }
 

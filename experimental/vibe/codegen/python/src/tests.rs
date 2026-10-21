@@ -58,6 +58,8 @@ fn generates_schema_driven_bridge_and_stubs() {
     assert!(bridge.content.contains("pub struct PyWorkerHandle"));
     assert!(!bridge.content.contains("pub fn start_collector("));
     assert!(bridge.content.contains("pub fn handle("));
+    assert!(bridge.content.contains("pub fn declaration_at("));
+    assert!(bridge.content.contains(".declaration_at(timestamp_ns,"));
     assert!(bridge.content.contains("pub struct PyThreadIdleHandle"));
     assert!(bridge.content.contains("pub struct PyThreadActiveHandle"));
     assert!(
@@ -66,6 +68,8 @@ fn generates_schema_driven_bridge_and_stubs() {
             .contains("pub struct PyThreadDynamicFsmHandle")
     );
     assert!(bridge.content.contains("pub fn into_dynamic("));
+    assert!(bridge.content.contains("pub fn active_at("));
+    assert!(bridge.content.contains(".active_at(timestamp_ns"));
     assert!(bridge.content.contains("InvalidFsmTransitionError"));
     assert!(bridge.content.contains("InvalidFsmStateError"));
     assert!(bridge.content.contains("pub fn try_into_active("));
@@ -129,6 +133,10 @@ fn generates_schema_driven_bridge_and_stubs() {
             .contains("def ndjson(output_dir: str | PathLike[str]) -> ExporterOptions")
     );
     assert!(stubs[0].content.contains("class WorkerHandle:"));
+    assert!(
+        class_body(&stubs[0].content, "WorkerHandle")
+            .contains("def declaration_at(self, timestamp_ns: int")
+    );
     assert!(class_body(&stubs[0].content, "WorkerHandle").contains("def id(self) -> _uuid.UUID"));
     assert!(stubs[0].content.contains("class WorkerObserver:"));
     assert!(
@@ -164,6 +172,11 @@ fn generates_schema_driven_bridge_and_stubs() {
         stubs[0]
             .content
             .contains("def active(self) -> ThreadActiveHandle")
+    );
+    assert!(
+        stubs[0]
+            .content
+            .contains("def active_at(self, timestamp_ns: int) -> ThreadActiveHandle")
     );
     assert!(!stubs[0].content.contains("def active(self, *, seq:"));
     assert!(

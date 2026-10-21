@@ -67,6 +67,7 @@ fn ordinary_handle(entity: &Entity) -> Result<TokenStream, GenerateError> {
         .events()
         .map(|event| {
             let method = raw_ident(to_case(event.name(), Case::Snake));
+            let method_at = raw_ident(format!("{}_at", to_case(event.name(), Case::Snake)));
             let variant = raw_ident(to_case(event.name(), Case::Pascal));
             let fallback = match event.cardinality() {
                 Cardinality::Once => format!(
@@ -95,6 +96,11 @@ fn ordinary_handle(entity: &Entity) -> Result<TokenStream, GenerateError> {
                          for this instance.",
                         event.name()
                     );
+                    let at_doc = format!(
+                        "Emit the once-cardinality `{}` event for this instance at a \
+                         caller-supplied Unix-nanosecond timestamp.",
+                        event.name()
+                    );
                     quote! {
                         #docs
                         pub fn #method(
@@ -104,22 +110,52 @@ fn ordinary_handle(entity: &Entity) -> Result<TokenStream, GenerateError> {
                             self.inner.emit_once::<#bit>(#event_name, #construct)
                         }
 
+                        #[doc = #at_doc]
+                        pub fn #method_at(
+                            &mut self,
+                            timestamp_ns: u64,
+                            #(#params),*
+                        ) -> ::core::result::Result<(), ::quent_instrumentation::HandleError> {
+                            self.inner.emit_once_at::<#bit>(
+                                #event_name,
+                                timestamp_ns,
+                                #construct,
+                            )
+                        }
+
                         #[doc = #emitted_doc]
                         pub fn #emitted_method(&self) -> bool {
                             self.inner.is_emitted::<#bit>()
                         }
                     }
                 }
-                Cardinality::Multi => quote! {
-                    #docs
-                    pub fn #method(
-                        &self,
-                        #(#params),*
-                    ) -> ::core::result::Result<(), ::quent_instrumentation::HandleError> {
-                        self.inner.emit(#construct);
-                        ::core::result::Result::Ok(())
+                Cardinality::Multi => {
+                    let at_doc = format!(
+                        "Emit a `{}` event for this instance at a caller-supplied \
+                         Unix-nanosecond timestamp.",
+                        event.name()
+                    );
+                    quote! {
+                        #docs
+                        pub fn #method(
+                            &self,
+                            #(#params),*
+                        ) -> ::core::result::Result<(), ::quent_instrumentation::HandleError> {
+                            self.inner.emit(#construct);
+                            ::core::result::Result::Ok(())
+                        }
+
+                        #[doc = #at_doc]
+                        pub fn #method_at(
+                            &self,
+                            timestamp_ns: u64,
+                            #(#params),*
+                        ) -> ::core::result::Result<(), ::quent_instrumentation::HandleError> {
+                            self.inner.emit_at(timestamp_ns, #construct);
+                            ::core::result::Result::Ok(())
+                        }
                     }
-                },
+                }
             })
         })
         .collect::<Result<Vec<_>, GenerateError>>()?;

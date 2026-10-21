@@ -833,7 +833,12 @@ fn entity_bindings(
         .events()
         .map(|event| {
             let model_method = raw_ident(to_case(event.name(), Case::Snake));
+            let model_method_at = raw_ident(format!("{}_at", to_case(event.name(), Case::Snake)));
             let method = raw_ident(py_safe(&to_case(event.name(), Case::Snake)));
+            let method_at = raw_ident(format!(
+                "{}_at",
+                py_safe(&to_case(event.name(), Case::Snake))
+            ));
             let params = event
                 .fields()
                 .map(|field| {
@@ -864,6 +869,13 @@ fn entity_bindings(
                     #[pyo3(signature = (*, #(#args),*))]
                 }
             });
+            let signature_at = if args.is_empty() {
+                quote! {}
+            } else {
+                quote! {
+                    #[pyo3(signature = (timestamp_ns, *, #(#args),*))]
+                }
+            };
             let event_method = match event.cardinality() {
                 Cardinality::Once => quote! {
                     #signature
@@ -873,6 +885,18 @@ fn entity_bindings(
                         self.inner.#model_method(#(#args),*)
                             .map_err(|error| EventAlreadyEmittedError::new_err(error.to_string()))
                     }
+
+                    #signature_at
+                    #[allow(clippy::too_many_arguments)]
+                    pub fn #method_at(
+                        &mut self,
+                        timestamp_ns: u64,
+                        #(#params),*
+                    ) -> PyResult<()> {
+                        #(#bindings)*
+                        self.inner.#model_method_at(timestamp_ns, #(#args),*)
+                            .map_err(|error| EventAlreadyEmittedError::new_err(error.to_string()))
+                    }
                 },
                 Cardinality::Multi => quote! {
                     #signature
@@ -880,6 +904,18 @@ fn entity_bindings(
                     pub fn #method(&self, #(#params),*) -> PyResult<()> {
                         #(#bindings)*
                         self.inner.#model_method(#(#args),*)
+                            .map_err(|error| QuentError::new_err(error.to_string()))
+                    }
+
+                    #signature_at
+                    #[allow(clippy::too_many_arguments)]
+                    pub fn #method_at(
+                        &self,
+                        timestamp_ns: u64,
+                        #(#params),*
+                    ) -> PyResult<()> {
+                        #(#bindings)*
+                        self.inner.#model_method_at(timestamp_ns, #(#args),*)
                             .map_err(|error| QuentError::new_err(error.to_string()))
                     }
                 },
@@ -1185,15 +1221,23 @@ fn fsm_dynamic_transition_method(
     runtime: &syn::Path,
 ) -> Result<TokenStream, GenerateError> {
     let model_method = raw_ident(to_case(event.name(), Case::Snake));
+    let model_method_at = raw_ident(format!("{}_at", to_case(event.name(), Case::Snake)));
     let method = raw_ident(py_safe(&to_case(event.name(), Case::Snake)));
+    let method_at = raw_ident(format!(
+        "{}_at",
+        py_safe(&to_case(event.name(), Case::Snake))
+    ));
     let fields = event
         .fields()
         .filter(|field| field.name() != SEQUENCE_FIELD_NAME)
         .collect::<Vec<_>>();
-    let params = fields.iter().map(|field| {
-        let name = raw_ident(py_safe(&to_case(field.name(), Case::Snake)));
-        quote! { #name: &Bound<'_, PyAny> }
-    });
+    let params = fields
+        .iter()
+        .map(|field| {
+            let name = raw_ident(py_safe(&to_case(field.name(), Case::Snake)));
+            quote! { #name: &Bound<'_, PyAny> }
+        })
+        .collect::<Vec<_>>();
     let bindings = fields
         .iter()
         .map(|field| {
@@ -1215,6 +1259,11 @@ fn fsm_dynamic_transition_method(
     let signature = (!args.is_empty()).then(|| {
         quote! { #[pyo3(signature = (*, #(#args),*))] }
     });
+    let signature_at = if args.is_empty() {
+        quote! {}
+    } else {
+        quote! { #[pyo3(signature = (timestamp_ns, *, #(#args),*))] }
+    };
     Ok(quote! {
         #signature
         #[allow(clippy::too_many_arguments)]
@@ -1224,6 +1273,21 @@ fn fsm_dynamic_transition_method(
                 .as_mut()
                 .ok_or_else(|| HandleConsumedError::new_err("FSM handle was consumed"))?
                 .#model_method(#(#args),*)
+                .map_err(|error| InvalidFsmTransitionError::new_err(error.to_string()))
+        }
+
+        #signature_at
+        #[allow(clippy::too_many_arguments)]
+        pub fn #method_at(
+            &mut self,
+            timestamp_ns: u64,
+            #(#params),*
+        ) -> PyResult<()> {
+            #(#bindings)*
+            self.inner
+                .as_mut()
+                .ok_or_else(|| HandleConsumedError::new_err("FSM handle was consumed"))?
+                .#model_method_at(timestamp_ns, #(#args),*)
                 .map_err(|error| InvalidFsmTransitionError::new_err(error.to_string()))
         }
     })
@@ -1248,15 +1312,23 @@ fn fsm_transition_method(
     runtime: &syn::Path,
 ) -> Result<TokenStream, GenerateError> {
     let model_method = raw_ident(to_case(event.name(), Case::Snake));
+    let model_method_at = raw_ident(format!("{}_at", to_case(event.name(), Case::Snake)));
     let method = raw_ident(py_safe(&to_case(event.name(), Case::Snake)));
+    let method_at = raw_ident(format!(
+        "{}_at",
+        py_safe(&to_case(event.name(), Case::Snake))
+    ));
     let fields = event
         .fields()
         .filter(|field| field.name() != SEQUENCE_FIELD_NAME)
         .collect::<Vec<_>>();
-    let params = fields.iter().map(|field| {
-        let name = raw_ident(py_safe(&to_case(field.name(), Case::Snake)));
-        quote! { #name: &Bound<'_, PyAny> }
-    });
+    let params = fields
+        .iter()
+        .map(|field| {
+            let name = raw_ident(py_safe(&to_case(field.name(), Case::Snake)));
+            quote! { #name: &Bound<'_, PyAny> }
+        })
+        .collect::<Vec<_>>();
     let bindings = fields
         .iter()
         .map(|field| {
@@ -1280,6 +1352,13 @@ fn fsm_transition_method(
             #[pyo3(signature = (*, #(#args),*))]
         }
     });
+    let signature_at = if args.is_empty() {
+        quote! {}
+    } else {
+        quote! {
+            #[pyo3(signature = (timestamp_ns, *, #(#args),*))]
+        }
+    };
     Ok(quote! {
         #signature
         #[allow(clippy::too_many_arguments)]
@@ -1289,6 +1368,22 @@ fn fsm_transition_method(
                 HandleConsumedError::new_err("FSM handle was consumed")
             })?;
             Ok(#target_handle { inner: Some(inner.#model_method(#(#args),*)) })
+        }
+
+        #signature_at
+        #[allow(clippy::too_many_arguments)]
+        pub fn #method_at(
+            &mut self,
+            timestamp_ns: u64,
+            #(#params),*
+        ) -> PyResult<#target_handle> {
+            #(#bindings)*
+            let inner = self.inner.take().ok_or_else(|| {
+                HandleConsumedError::new_err("FSM handle was consumed")
+            })?;
+            Ok(#target_handle {
+                inner: Some(inner.#model_method_at(timestamp_ns, #(#args),*)),
+            })
         }
     })
 }
