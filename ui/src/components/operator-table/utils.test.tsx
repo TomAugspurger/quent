@@ -11,7 +11,7 @@ import {
   type QueryEntities,
   type QuantitySpec,
 } from '@quent/utils';
-import { buildOperatorRows } from './utils';
+import { buildOperatorRows, selectDefaultOperatorStats } from './utils';
 import type { OperatorTableRow } from './types';
 
 function makeEntities(statistics: NonNullable<Operator['statistics']>): QueryEntities {
@@ -59,7 +59,10 @@ function makeEntities(statistics: NonNullable<Operator['statistics']>): QueryEnt
 }
 
 const schema: PivotedStatTableSchema<OperatorTableRow> = {
-  groups: { item: { id: row => row.itemId, label: row => row.itemName } },
+  groups: {
+    item_type: { id: row => row.itemType },
+    item: { id: row => row.itemId, label: row => row.itemName },
+  },
   itemId: row => row.itemId,
   scopeId: row => row.scopeId,
   itemType: row => row.itemType,
@@ -237,5 +240,51 @@ describe('operator table structured statistics', () => {
     };
     renderRows(buildOperatorRows(entities, new Set(['plan'])), true, []);
     expect(screen.getByRole('cell', { name: expected })).toBeInTheDocument();
+  });
+
+  it('selects reservation metrics by default', () => {
+    const rows = buildOperatorRows(
+      makeEntities({
+        custom_statistics: [
+          { value: { key: 'input_bytes', value: 1 }, quantity: 'bytes' },
+          { value: { key: 'reservation_peak_bytes', value: 2 }, quantity: 'bytes' },
+          { value: { key: 'reservation_count', value: 1 }, quantity: null },
+          { value: { key: 'other', value: 3 }, quantity: null },
+        ],
+      }),
+      new Set(['plan'])
+    );
+    const metadata = buildStatisticFieldPresentations(rows.flatMap(row => row.stats));
+
+    expect(
+      selectDefaultOperatorStats(
+        rows[0].stats.map(stat => stat.key),
+        metadata
+      )
+    ).toEqual(['duration_s', 'input_bytes', 'reservation_peak_bytes', 'reservation_count']);
+  });
+
+  it('sums reservation metrics when grouped by operator type', () => {
+    const entities = makeEntities({
+      custom_statistics: [
+        { value: { key: 'reservation_peak_bytes', value: 100 }, quantity: 'bytes' },
+        { value: { key: 'reservation_count', value: 1 }, quantity: null },
+      ],
+    });
+    entities.operators.other = {
+      ...entities.operators.scan,
+      id: 'other',
+      statistics: {
+        custom_statistics: [
+          { value: { key: 'reservation_peak_bytes', value: 200 }, quantity: 'bytes' },
+          { value: { key: 'reservation_count', value: 2 }, quantity: null },
+        ],
+      },
+    };
+
+    renderRows(buildOperatorRows(entities, new Set(['plan'])), true, ['item_type']);
+
+    expect(screen.getByRole('cell', { name: '300.00 B' })).toBeInTheDocument();
+    expect(screen.getByRole('cell', { name: '3' })).toBeInTheDocument();
   });
 });

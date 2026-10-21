@@ -7,9 +7,24 @@ import {
   statisticFieldLabel,
   workerDisplayName,
   type Statistic,
+  type StatisticFieldPresentation,
 } from '@quent/utils';
 import { parseCustomStatistics } from '@quent/components';
 import type { OperatorTableRow } from './types';
+
+export function selectDefaultOperatorStats(
+  stats: string[],
+  metadata: ReadonlyMap<string, StatisticFieldPresentation>
+): string[] {
+  const matching = (prefix: string) =>
+    stats.filter(stat => metadata.get(stat)?.fieldName.startsWith(prefix));
+  return [
+    ...stats.filter(stat => stat === 'duration_s'),
+    ...matching('input_'),
+    ...matching('output_'),
+    ...matching('reservation_'),
+  ];
+}
 
 /**
  * Flatten a `QueryEntities` graph into one row per operator across the given
