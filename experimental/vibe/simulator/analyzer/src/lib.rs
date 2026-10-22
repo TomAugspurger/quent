@@ -492,6 +492,18 @@ impl UiAnalyzer for SimulatorUiAnalyzer {
             resource_tree,
             unique_operator_names,
             quantity_specs: quantity_specs(),
+            default_operator_statistics: [
+                "duration_s",
+                "input_batches",
+                "input_bytes",
+                "input_rows",
+                "output_batches",
+                "output_bytes",
+                "output_rows",
+            ]
+            .into_iter()
+            .map(str::to_owned)
+            .collect(),
             start_time_unix_ns,
             duration_s,
         })

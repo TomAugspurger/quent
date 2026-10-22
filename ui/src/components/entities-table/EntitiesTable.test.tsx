@@ -95,6 +95,7 @@ const queryBundle = {
   resource_tree: { Resource: { Resource: 'resource-1' } },
   unique_operator_names: [],
   quantity_specs: {},
+  default_operator_statistics: [],
   start_time_unix_ns: 0n,
 } satisfies QueryBundle<EntityRef>;
 

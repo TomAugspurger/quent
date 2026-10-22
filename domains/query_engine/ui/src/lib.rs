@@ -356,6 +356,9 @@ pub struct QueryBundle<E = EntityRef> {
     /// Quantity specifications for displaying values, keyed by quantity name.
     pub quantity_specs: HashMap<String, QuantitySpec>,
 
+    /// Operator statistic field names to select by default.
+    pub default_operator_statistics: Vec<String>,
+
     /// The number of nanoseconds passed since the Unix epoch at which the
     /// engine started executing this query.
     pub start_time_unix_ns: TimeUnixNanoSec,

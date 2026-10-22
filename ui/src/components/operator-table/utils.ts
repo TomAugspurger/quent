@@ -7,9 +7,19 @@ import {
   statisticFieldLabel,
   workerDisplayName,
   type Statistic,
+  type StatisticFieldPresentation,
 } from '@quent/utils';
 import { parseCustomStatistics } from '@quent/components';
 import type { OperatorTableRow } from './types';
+
+export function selectDefaultOperatorStats(
+  stats: string[],
+  metadata: ReadonlyMap<string, StatisticFieldPresentation>,
+  analyzerDefaults: string[]
+): string[] {
+  const analyzerDefaultSet = new Set(analyzerDefaults);
+  return stats.filter(stat => analyzerDefaultSet.has(metadata.get(stat)?.fieldName ?? stat));
+}
 
 /**
  * Flatten a `QueryEntities` graph into one row per operator across the given

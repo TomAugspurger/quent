@@ -33,7 +33,7 @@ import {
   type OperatorTableIndexKey,
   type OperatorTableRow,
 } from './types';
-import { buildOperatorRows, buildItemIdIndex } from './utils';
+import { buildOperatorRows, buildItemIdIndex, selectDefaultOperatorStats } from './utils';
 
 const OPERATOR_SCHEMA: PivotedStatTableSchema<OperatorTableRow> = {
   groups: {
@@ -77,7 +77,11 @@ export function OperatorTable({ queryBundle }: OperatorTableProps) {
   const resolveOperatorTypeColor = useColorResolver(COLOR_REGISTRY_KEYS.OPERATOR_TYPES);
   const { theme } = useTheme();
   const isDark = theme === THEME_DARK;
-  const { entities, quantity_specs: quantitySpecs } = queryBundle;
+  const {
+    entities,
+    quantity_specs: quantitySpecs,
+    default_operator_statistics: defaultOperatorStatistics,
+  } = queryBundle;
   const dagHoveredOperatorId =
     highlightState.source === 'dag' ? highlightState.primaryOperatorId : null;
   // A stable renderer callback prevents pivot cells from remounting on hover updates.
@@ -182,12 +186,8 @@ export function OperatorTable({ queryBundle }: OperatorTableProps) {
     baseIndexOrder: OPERATOR_TABLE_INDEX_ORDER,
     defaultEnabled: DEFAULT_OPERATOR_TABLE_ENABLED,
     allStatNames,
-    defaultStatSelector: stats => {
-      const duration = stats.filter(stat => stat === 'duration_s');
-      const inputs = stats.filter(stat => statMetadata.get(stat)?.fieldName.startsWith('input_'));
-      const outputs = stats.filter(stat => statMetadata.get(stat)?.fieldName.startsWith('output_'));
-      return [...duration, ...inputs, ...outputs];
-    },
+    defaultStatSelector: stats =>
+      selectDefaultOperatorStats(stats, statMetadata, defaultOperatorStatistics),
     filterIndexOrder,
     persistKey: OPERATOR_TABLE_PERSIST_KEY,
     rows,

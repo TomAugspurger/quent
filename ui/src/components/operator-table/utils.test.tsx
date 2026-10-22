@@ -11,7 +11,7 @@ import {
   type QueryEntities,
   type QuantitySpec,
 } from '@quent/utils';
-import { buildOperatorRows } from './utils';
+import { buildOperatorRows, selectDefaultOperatorStats } from './utils';
 import type { OperatorTableRow } from './types';
 
 function makeEntities(statistics: NonNullable<Operator['statistics']>): QueryEntities {
@@ -237,5 +237,27 @@ describe('operator table structured statistics', () => {
     };
     renderRows(buildOperatorRows(entities, new Set(['plan'])), true, []);
     expect(screen.getByRole('cell', { name: expected })).toBeInTheDocument();
+  });
+
+  it('selects the analyzer-configured statistics', () => {
+    const rows = buildOperatorRows(
+      makeEntities({
+        custom_statistics: [
+          { value: { key: 'input_bytes', value: 1 }, quantity: 'bytes' },
+          { value: { key: 'reservation_peak_bytes', value: 2 }, quantity: 'bytes' },
+          { value: { key: 'other', value: 3 }, quantity: null },
+        ],
+      }),
+      new Set(['plan'])
+    );
+    const metadata = buildStatisticFieldPresentations(rows.flatMap(row => row.stats));
+
+    expect(
+      selectDefaultOperatorStats(
+        rows[0].stats.map(stat => stat.key),
+        metadata,
+        ['duration_s', 'input_bytes', 'reservation_peak_bytes']
+      )
+    ).toEqual(['duration_s', 'input_bytes', 'reservation_peak_bytes']);
   });
 });
