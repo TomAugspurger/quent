@@ -26,6 +26,17 @@ pub use quent_schema;
 /// Configuration for PyO3 bridge generation.
 pub struct Options {
     pub module_name: String,
+    /// Output filename for the generated Rust bridge.
+    pub bridge_file_name: String,
+    /// Optional output filename for the generated type stub.
+    ///
+    /// By default, top-level modules use a package-style
+    /// `<module>/__init__.pyi` layout.
+    pub stub_file_name: Option<String>,
+    /// Text prepended verbatim to the generated Rust bridge.
+    pub bridge_preamble: String,
+    /// Text prepended verbatim to the generated Python type stub.
+    pub stub_preamble: String,
     pub instrumentation_path: String,
     pub runtime_path: String,
     pub io_path: String,
@@ -64,6 +75,10 @@ impl Default for Options {
     fn default() -> Self {
         Self {
             module_name: "quent_model".to_owned(),
+            bridge_file_name: "pyo3_bridge.rs".to_owned(),
+            stub_file_name: None,
+            bridge_preamble: String::new(),
+            stub_preamble: String::new(),
             instrumentation_path: "instrumentation".to_owned(),
             runtime_path: "quent_instrumentation".to_owned(),
             io_path: "quent_io".to_owned(),
@@ -129,8 +144,8 @@ pub fn emit(schema: &Schema, options: &Options) -> Result<Vec<GeneratedFile>, Ge
         }
     };
     Ok(vec![GeneratedFile {
-        name: "pyo3_bridge.rs".to_owned(),
-        content: pretty(tokens)?,
+        name: options.bridge_file_name.clone(),
+        content: format!("{}{}", options.bridge_preamble, pretty(tokens)?),
     }])
 }
 
@@ -270,6 +285,26 @@ fn validate_options(options: &Options) -> Result<(), GenerateError> {
         return Err(GenerateError::InvalidOption {
             option: "module_name",
             reason: "expected non-keyword Python identifiers separated by `.`".to_owned(),
+        });
+    }
+    validate_file_name("bridge_file_name", &options.bridge_file_name)?;
+    if let Some(file_name) = &options.stub_file_name {
+        validate_file_name("stub_file_name", file_name)?;
+    }
+    Ok(())
+}
+
+fn validate_file_name(option: &'static str, file_name: &str) -> Result<(), GenerateError> {
+    let path = Path::new(file_name);
+    if file_name.is_empty()
+        || path.is_absolute()
+        || path
+            .components()
+            .any(|component| matches!(component, std::path::Component::ParentDir))
+    {
+        return Err(GenerateError::InvalidOption {
+            option,
+            reason: "expected a non-empty relative path without parent traversal".to_owned(),
         });
     }
     Ok(())
