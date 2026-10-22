@@ -230,33 +230,6 @@ fn generates_schema_driven_bridge_and_stubs() {
     assert!(!idle_thread.contains("def idle(self"));
 }
 
-#[test]
-fn emits_direct_extension_files_with_preambles() {
-    let schema = parse_from_str(DEMO, None).unwrap().schema;
-    let options = Options {
-        module_name: "cudf_polars_quent".to_owned(),
-        bridge_file_name: "cudf_polars_quent.rs".to_owned(),
-        stub_file_name: Some("cudf_polars_quent.pyi".to_owned()),
-        bridge_preamble: "// downstream Rust preamble\n".to_owned(),
-        stub_preamble: "# downstream Python preamble\n".to_owned(),
-        ..Options::default()
-    };
-
-    let bridge = emit(&schema, &options).unwrap().remove(0);
-    assert_eq!(bridge.name, "cudf_polars_quent.rs");
-    assert!(bridge.content.starts_with("// downstream Rust preamble\n"));
-    assert!(bridge.content.contains("pub fn cudf_polars_quent("));
-
-    let stubs = emit_stubs(&schema, &options).unwrap();
-    assert_eq!(stubs[0].name, "cudf_polars_quent.pyi");
-    assert!(
-        stubs[0]
-            .content
-            .starts_with("# downstream Python preamble\n")
-    );
-    assert_eq!(stubs[1].name, "py.typed");
-}
-
 fn class_body<'a>(stubs: &'a str, name: &str) -> &'a str {
     stubs
         .split_once(&format!("class {name}:"))
@@ -348,26 +321,6 @@ fn rejects_invalid_module_names() {
                     ..Options::default()
                 }
             ),
-            Err(GenerateError::InvalidOption { .. })
-        ));
-    }
-}
-
-#[test]
-fn rejects_unsafe_generated_file_names() {
-    let schema = parse_from_str(DEMO, None).unwrap().schema;
-    for options in [
-        Options {
-            bridge_file_name: "../bridge.rs".to_owned(),
-            ..Options::default()
-        },
-        Options {
-            stub_file_name: Some(String::new()),
-            ..Options::default()
-        },
-    ] {
-        assert!(matches!(
-            emit(&schema, &options),
             Err(GenerateError::InvalidOption { .. })
         ));
     }

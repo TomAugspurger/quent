@@ -19,14 +19,6 @@ quent_schema_codegen_python::write_generated_files(
 )?;
 ```
 
-`module_name` may be the final extension-module name, allowing the generated
-bridge to be included directly as the crate's PyO3 entry point. Override
-`bridge_file_name` and `stub_file_name` for a flat extension layout such as
-`application_events.rs` plus `application_events.pyi`. `bridge_preamble` and
-`stub_preamble` prepend downstream license or generated-file headers without
-post-processing the generated output. The defaults retain the package-style
-stub layout and `pyo3_bridge.rs` filename.
-
 Records are accepted as mappings. Targeted entity references accept either a
 standard-library `uuid.UUID` or the matching generated handle; references
 carrying data accept a mapping with `target` and `data` fields.
