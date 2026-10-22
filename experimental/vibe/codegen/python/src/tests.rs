@@ -151,6 +151,10 @@ fn generates_schema_driven_bridge_and_stubs() {
             .contains("def id(self) -> _uuid.UUID")
     );
     assert!(
+        class_body(&stubs[0].content, "ThreadDynamicFsmHandle")
+            .contains("def active_at(self, timestamp_ns: int)")
+    );
+    assert!(
         stubs[0]
             .content
             .contains("class InvalidFsmStateError(QuentError):")
