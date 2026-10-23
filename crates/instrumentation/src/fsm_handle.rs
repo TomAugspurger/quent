@@ -152,8 +152,9 @@ where
     /// Emits `event` at a caller-supplied Unix-nanosecond timestamp with the
     /// next wrapping transition sequence number.
     ///
-    /// Hidden because generated instrumentation uses this primitive to
-    /// implement in-place transitions on dynamic-state FSM handles.
+    /// Hidden because generated instrumentation uses this primitive to implement
+    /// in-place transitions on dynamic-state FSM handles; application code uses
+    /// the generated transition methods instead.
     #[doc(hidden)]
     pub fn transition_mut_at(&mut self, timestamp: TimeUnixNanoSec, event: E::Payload) {
         self.transition_mut_with_timestamp(Some(timestamp), event);

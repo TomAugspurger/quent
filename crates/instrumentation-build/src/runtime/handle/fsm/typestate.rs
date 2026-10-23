@@ -14,7 +14,7 @@ use quote::quote;
 use super::super::{event_construct, event_fields, event_params};
 use crate::{
     GenerateError,
-    common::{doc_attr_or, raw_ident, relative_root_type, to_case},
+    common::{raw_ident, relative_root_type, to_case},
     runtime::{event_ident, marker_ident, model_ident},
 };
 
@@ -181,17 +181,12 @@ fn transition_method(
     let method_at = raw_ident(format!("{}_at", to_case(event.name(), Case::Snake)));
     let variant = raw_ident(to_case(event.name(), Case::Pascal));
     let target_marker = raw_ident(to_case(event.name(), Case::Pascal));
-    let fallback = format!("Transition this FSM into `{}`.", event.name());
-    let at_fallback = format!(
-        "Transition this FSM into `{}` at a caller-supplied Unix-nanosecond timestamp.",
-        event.name()
-    );
-    let docs = doc_attr_or(event.annotations().docs(), &fallback);
-    let at_docs = doc_attr_or(event.annotations().docs(), &at_fallback);
+    let (docs, at_docs) = super::transition_docs(event);
     let params = event_params(entity, event, Some(SEQUENCE_FIELD_NAME))?;
     let sequence_placeholder = quote! { 0 };
     let fields = event_fields(event, Some((SEQUENCE_FIELD_NAME, &sequence_placeholder)));
     let construct = event_construct(event_ty, &variant, &fields);
+
     Ok(quote! {
         #docs
         pub fn #method(self, #(#params),*) -> #handle_ty<#entity_ty, #state_module::#target_marker> {

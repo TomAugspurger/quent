@@ -279,8 +279,8 @@ fn emit_event_method(
         py_safe(&to_case(event.name(), Case::Snake)),
     ));
     output.push_str(&format!(
-        "    def {}_at(self, timestamp_ns: int{suffix}) -> {return_type}: ...\n",
-        py_safe(&to_case(event.name(), Case::Snake)),
+        "    def {}(self, timestamp_ns: int{suffix}) -> {return_type}: ...\n",
+        py_safe(&format!("{}_at", to_case(event.name(), Case::Snake))),
     ));
 }
 

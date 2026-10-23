@@ -8,7 +8,7 @@ use convert_case::Case;
 use proc_macro2::TokenStream;
 use quent_schema::{Entity, Schema};
 use quote::quote;
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 use syn::Ident;
 
 use crate::{
@@ -28,7 +28,7 @@ pub(crate) fn entity_runtime_types(
     let event_methods = entity
         .events()
         .map(|event| to_case(event.name(), Case::Snake))
-        .collect::<HashSet<_>>();
+        .collect::<BTreeSet<_>>();
     if event_methods.contains("id") {
         return Err(GenerateError::HandleIdCollision {
             entity: entity.path().clone(),
@@ -42,6 +42,16 @@ pub(crate) fn entity_runtime_types(
         return Err(GenerateError::TimestampedEventMethodCollision {
             entity: entity.path().clone(),
             method,
+        });
+    }
+    if let Some(event) = entity.events().find(|event| {
+        event
+            .fields()
+            .any(|field| to_case(field.name(), Case::Snake) == "timestamp_ns")
+    }) {
+        return Err(GenerateError::TimestampParameterCollision {
+            entity: entity.path().clone(),
+            event: event.name().clone(),
         });
     }
     let handle = handle::entity_handle(entity)?;

@@ -192,6 +192,16 @@ pub enum GenerateError {
         /// The generated method name shared by an event and an `_at` companion.
         method: String,
     },
+    #[error(
+        "generated parameter `timestamp_ns` conflicts with a field of event `{event}` on entity \
+         `{entity}`"
+    )]
+    TimestampParameterCollision {
+        /// The offending entity.
+        entity: Path,
+        /// The event whose field conflicts with the `_at` method parameter.
+        event: Identifier,
+    },
     #[error("`collector_sink` requires serde generation")]
     CollectorSinkRequiresSerde,
     #[error("failed to write generated file")]
@@ -489,6 +499,22 @@ mod path_tests {
             Err(GenerateError::TimestampedEventMethodCollision { method, .. })
                 if method == "started_at"
         ));
+
+        for field_name in ["timestamp_ns", "timestampNs"] {
+            let schema = SchemaBuilder::try_new("Demo")
+                .unwrap()
+                .with_entity(entity(
+                    "Task",
+                    [event("started", [field(field_name, DataType::U64)])],
+                ))
+                .build()
+                .unwrap();
+            assert!(matches!(
+                generate_str(&schema, &Options::default()),
+                Err(GenerateError::TimestampParameterCollision { event, .. })
+                    if event == "started"
+            ));
+        }
     }
 
     #[test]

@@ -306,6 +306,120 @@ entities:
 }
 
 #[test]
+fn rejects_timestamped_method_name_collisions() {
+    for (schema, expected) in [
+        (
+            r#"
+quent: '0.1.0'
+model: collision
+entities:
+  Server: { events: { started: {}, started_at: {} } }
+"#,
+            "started_at",
+        ),
+        (
+            r#"
+quent: '0.1.0'
+model: collision
+entities:
+  Server: { events: { started: { attributes: { timestamp_ns: u64 } } } }
+"#,
+            "timestamp_ns",
+        ),
+        (
+            r#"
+quent: '0.1.0'
+model: collision
+fsms:
+  Job:
+    states:
+      try_into_b: { initial: true, to: [b_at] }
+      b_at: {}
+"#,
+            "try_into_b_at",
+        ),
+    ] {
+        let schema = parse_from_str(schema, None).unwrap().schema;
+        assert!(matches!(
+            emit(&schema, &Options::default()),
+            Err(GenerateError::NameCollision { name }) if name == expected
+        ));
+    }
+}
+
+#[test]
+fn timestamped_methods_of_keyword_events_need_no_escaping() {
+    let schema = parse_from_str(
+        r#"
+quent: '0.1.0'
+model: keywords
+entities:
+  Server: { events: { from: { attributes: { value: u32 } } } }
+fsms:
+  Job:
+    states:
+      return: { initial: true, to: [pass] }
+      pass: {}
+"#,
+        None,
+    )
+    .unwrap()
+    .schema;
+    let bridge = emit(&schema, &Options::default()).unwrap().remove(0);
+    syn::parse_file(&bridge.content).unwrap();
+    let content = bridge.content.split_whitespace().collect::<String>();
+    assert!(content.contains("pubfnfrom_(&mutself,value:&Bound<'_,PyAny>)"));
+    assert!(content.contains("pubfnfrom_at(&mutself,timestamp_ns:u64,value:&Bound<'_,PyAny>"));
+    assert!(content.contains(".from_at(timestamp_ns,value)"));
+    assert!(content.contains("pubfnreturn_at(&mutself,timestamp_ns:u64)"));
+    assert!(content.contains(".return_at(timestamp_ns)"));
+    assert!(content.contains(".r#return()"));
+    assert!(!content.contains("__at"));
+
+    let stubs = emit_stubs(&schema, &Options::default()).unwrap();
+    let server = class_body(&stubs[0].content, "ServerHandle");
+    assert!(server.contains("def from_(self, *, value: int) -> None"));
+    assert!(server.contains("def from_at(self, timestamp_ns: int, *, value: int) -> None"));
+    assert!(
+        class_body(&stubs[0].content, "JobHandle")
+            .contains("def return_at(self, timestamp_ns: int)")
+    );
+    assert!(!stubs[0].content.contains("__at"));
+}
+
+#[test]
+fn event_methods_and_timestamped_counterparts_share_one_helper() {
+    let schema = parse_from_str(DEMO, None).unwrap().schema;
+    let bridge = emit(&schema, &Options::default()).unwrap().remove(0);
+    let content = bridge.content.split_whitespace().collect::<String>();
+    for (method, helper, args) in [
+        ("declaration", "_emit_declaration", "instance_name"),
+        ("recorded", "_emit_recorded", "message,source,worker"),
+        ("idle", "_emit_idle", "worker"),
+        ("running", "_emit_running", ""),
+    ] {
+        let separator = if args.is_empty() { "" } else { "," };
+        assert!(
+            content.contains(&format!("fn{helper}(")),
+            "missing {helper}"
+        );
+        assert!(content.contains(&format!("pubfn{method}(")));
+        assert!(content.contains(&format!("self.{helper}(None{separator}{args})")));
+        assert!(content.contains(&format!("pubfn{method}_at(")));
+        assert!(
+            content.contains(&format!(
+                "self.{helper}(Some(timestamp_ns){separator}{args})"
+            )),
+            "{method}_at does not delegate to {helper}"
+        );
+    }
+    assert!(content.contains("timestamp_ns:Option<u64>"));
+    assert!(content.contains("Some(timestamp_ns)=>inner.running_at(timestamp_ns),"));
+    assert!(content.contains("None=>inner.running(),"));
+    assert!(content.contains("#[pyo3(signature=(timestamp_ns,*,instance_name))]"));
+}
+
+#[test]
 fn rejects_invalid_module_names() {
     let schema = parse_from_str(DEMO, None).unwrap().schema;
     for module_name in ["", "bad-name", "package.class"] {

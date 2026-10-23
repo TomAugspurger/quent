@@ -120,7 +120,7 @@ impl<E: InstrumentedEntity> HandleInner<E> {
     ///
     /// # Errors
     ///
-    /// Returns [`HandleError`] when the event was already emitted.
+    /// Returns [`HandleError`](crate::HandleError) when the event was already emitted.
     #[doc(hidden)]
     pub fn emit_once_at<const INDEX: u32>(
         &mut self,
