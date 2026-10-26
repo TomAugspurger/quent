@@ -34,5 +34,7 @@ allowBuilds:
   protobufjs: true
 
 overrides:
+  # jsdom's locked undici release is affected by GHSA-xjj6-f33q-929c.
+  'jsdom>undici': ^8.12.2
   # solid-js@1.9.15 pins seroval to ~1.5.4, excluding patched releases.
   'solid-js>seroval': ^1.6.3
